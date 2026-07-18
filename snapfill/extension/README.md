@@ -7,9 +7,10 @@ This Manifest V3 extension is the companion for cross-site form filling. The web
 1. Open `chrome://extensions` in Chrome or a Chromium browser.
 2. Enable Developer mode.
 3. Select **Load unpacked** and choose this `extension` folder.
-4. Open SnapFill, scan a document, complete the review, then open the extension on the SnapFill tab and select **Import current SnapFill data**.
-5. Paste a destination URL in the **Target form URL** box and select **Open and autofill**. The provided Google Form is the default test target.
-6. Put `OPENAI_API_KEY` in `snapfill/.env.local` to enable AI mapping for unfamiliar form labels. The agent sends only form metadata and profile key names to the resolver; it never sends field values or passwords.
+4. Open the extension once to create or unlock the local vault.
+5. Open SnapFill, scan a document, complete the review, and use the **Autofill this form** control on the **Agent ready** screen. The provided Google Form is the default test target.
+6. Use the extension's **Target form URL** control only when you need to grant access to a new destination site.
+7. Put `OPENAI_API_KEY` in `snapfill/.env` to enable AI mapping for unfamiliar form labels. The agent sends only form metadata and profile key names to the resolver; it never sends field values or passwords.
 
 ## Security model
 

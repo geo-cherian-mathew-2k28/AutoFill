@@ -162,6 +162,8 @@ async function waitForFillableControls(tabId) {
 
 async function openAndFill(url, includeOptional = false) {
   const parsed = new URL(url)
+  const hasAccess = await chrome.permissions.contains({ origins: [`${parsed.origin}/*`] })
+  if (!hasAccess) throw new Error(`Allow access to ${parsed.hostname} in the SnapFill extension before filling this form.`)
   const tab = await chrome.tabs.create({ url: parsed.toString(), active: true })
   if (!tab.id) throw new Error('Could not open the form.')
   await waitForLoad(tab.id)
@@ -183,6 +185,16 @@ async function importSnapFill() {
   return summary()
 }
 
+async function webAgentFill({ url, profile, document, includeOptional = true }) {
+  if (!url || typeof url !== 'string') throw new Error('Enter a valid destination form URL.')
+  if (!profile || typeof profile !== 'object') throw new Error('No reviewed details are available to fill.')
+  const safeProfile = Object.fromEntries(Object.entries(profile).filter(([key, value]) => typeof key === 'string' && typeof value === 'string' && value.trim()))
+  if (!Object.keys(safeProfile).length) throw new Error('No reviewed details are available to fill.')
+  await saveProfile(safeProfile)
+  if (document?.id && document?.displayName) await saveDocument({ id: document.id, name: document.displayName, importedAt: new Date().toISOString() })
+  return openAndFill(url, Boolean(includeOptional))
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const handlers = {
     status: async () => ({ exists: await vaultExists(), ...summary() }),
@@ -192,6 +204,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     saveProfile: async () => saveProfile(message.profile),
     saveCredential: async () => saveCredential(message.credential),
     importSnapFill: async () => importSnapFill(),
+    webAgentFill: async () => webAgentFill(message),
     fillCurrent: async () => fillTab((await activeTab()).id, message.includeOptional),
     openAndFill: async () => openAndFill(message.url, message.includeOptional),
   }
