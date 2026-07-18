@@ -22,6 +22,20 @@ function mappingSchema(availableKeys) {
   }
 }
 
+function responseText(body) {
+  if (typeof body.output_text === 'string') return body.output_text
+
+  const message = Array.isArray(body.output)
+    ? body.output.find((item) => item?.type === 'message' && Array.isArray(item.content))
+    : undefined
+  const text = message?.content.find((item) => item?.type === 'output_text')?.text
+
+  if (typeof text !== 'string' || !text.trim()) {
+    throw new Error('OpenAI returned no structured form mapping.')
+  }
+  return text
+}
+
 export async function resolveFormFields({ apiKey, model = DEFAULT_MODEL, fields, availableKeys }) {
   if (!apiKey) throw new Error('OPENAI_API_KEY is not configured.')
   if (!Array.isArray(fields) || !Array.isArray(availableKeys)) throw new Error('Invalid form mapping request.')
@@ -54,7 +68,7 @@ export async function resolveFormFields({ apiKey, model = DEFAULT_MODEL, fields,
 
   if (!response.ok) throw new Error(`OpenAI request failed (${response.status}).`)
   const body = await response.json()
-  const result = JSON.parse(body.output_text)
+  const result = JSON.parse(responseText(body))
   return {
     mappings: result.mappings.filter((mapping) => Number.isInteger(mapping.fieldIndex) && availableKeys.includes(mapping.profileKey) && mapping.profileKey !== 'password'),
   }

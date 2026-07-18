@@ -145,12 +145,27 @@ async function waitForLoad(tabId) {
   })
 }
 
+function hasFillableControls() {
+  return [...document.querySelectorAll('input, textarea, select, [contenteditable="true"][role="textbox"]')]
+    .some((control) => !['hidden', 'submit', 'button', 'reset', 'radio', 'checkbox'].includes(control.type))
+}
+
+async function waitForFillableControls(tabId) {
+  const deadline = Date.now() + 10000
+  while (Date.now() < deadline) {
+    const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: hasFillableControls })
+    if (result?.result) return
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  throw new Error('No fillable text, date, select, or editable controls were found on this form.')
+}
+
 async function openAndFill(url, includeOptional = false) {
   const parsed = new URL(url)
   const tab = await chrome.tabs.create({ url: parsed.toString(), active: true })
   if (!tab.id) throw new Error('Could not open the form.')
   await waitForLoad(tab.id)
-  await new Promise((resolve) => setTimeout(resolve, 600))
+  await waitForFillableControls(tab.id)
   return fillTab(tab.id, includeOptional)
 }
 
