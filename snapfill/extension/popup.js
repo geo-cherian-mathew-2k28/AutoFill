@@ -11,6 +11,13 @@ async function send(type, payload = {}) {
   return response.data
 }
 
+async function approveTarget(url) {
+  const parsed = new URL(url)
+  const granted = await chrome.permissions.request({ origins: [`${parsed.origin}/*`] })
+  if (!granted) throw new Error('Allow access to this site so SnapFill can fill its form.')
+  return parsed.toString()
+}
+
 function notify(text, error = false) {
   message.textContent = text
   message.classList.toggle('error', error)
@@ -56,7 +63,11 @@ document.querySelector('#fill-current-button').addEventListener('click', async (
 
 document.querySelector('#target-form').addEventListener('submit', async (event) => {
   event.preventDefault()
-  try { const result = await send('openAndFill', { url: document.querySelector('#target-url').value, includeOptional: document.querySelector('#include-optional').checked }); notify(`${result.filled} field${result.filled === 1 ? '' : 's'} filled · ${result.strategy}`) } catch (error) { notify(error.message, true) }
+  try {
+    const url = await approveTarget(document.querySelector('#target-url').value)
+    const result = await send('openAndFill', { url, includeOptional: document.querySelector('#include-optional').checked })
+    notify(`${result.filled} field${result.filled === 1 ? '' : 's'} filled · ${result.strategy}`)
+  } catch (error) { notify(error.message, true) }
 })
 
 document.querySelector('#profile-form').addEventListener('submit', async (event) => {

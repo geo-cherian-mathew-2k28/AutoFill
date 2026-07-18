@@ -1,8 +1,11 @@
 import { createVault, getVault, lockVault, recordReceipt, saveCredential, saveDocument, saveProfile, saveRecipe, saveSitePolicy, summary, unlockVault, vaultExists } from './vault.js'
 
 function formDescriptors() {
-  return [...document.querySelectorAll('input, textarea, select')].map((control, index) => {
-    const label = control.labels ? [...control.labels].map((item) => item.textContent).join(' ') : ''
+  const controls = [...document.querySelectorAll('input, textarea, select, [contenteditable="true"][role="textbox"]')]
+  return controls.filter((control) => !['hidden', 'submit', 'button', 'reset', 'radio', 'checkbox'].includes(control.type)).map((control, index) => {
+    const referencedText = (control.getAttribute('aria-labelledby') ?? '').split(/\s+/).map((id) => document.getElementById(id)?.textContent).filter(Boolean).join(' ')
+    const containerText = control.closest('[role="listitem"], [data-item-id], form > div')?.innerText?.slice(0, 500) ?? ''
+    const label = [control.labels ? [...control.labels].map((item) => item.textContent).join(' ') : '', control.getAttribute('aria-label'), referencedText, containerText].filter(Boolean).join(' ')
     return {
       index,
       label,
@@ -33,14 +36,16 @@ function fillActiveForm(profile, credential, aiMappings = {}, includeOptional = 
   const values = { ...profile, firstName: nameParts[0] ?? '', lastName: nameParts.slice(1).join(' '), username: credential?.username ?? '', password: credential?.password ?? '' }
   let filled = 0
   const sharedKeys = []
-  const controls = [...document.querySelectorAll('input, textarea, select')]
+  const controls = [...document.querySelectorAll('input, textarea, select, [contenteditable="true"][role="textbox"]')].filter((control) => !['hidden', 'submit', 'button', 'reset', 'radio', 'checkbox'].includes(control.type))
 
   function setValue(control, value) {
-    if (!value || control.disabled || control.readOnly || control.value) return false
+    if (!value || control.disabled || control.readOnly || control.value || (control.isContentEditable && control.textContent?.trim())) return false
     if (control instanceof HTMLSelectElement) {
       const option = [...control.options].find((item) => normalized(item.value) === normalized(value) || normalized(item.text) === normalized(value))
       if (!option) return false
       control.value = option.value
+    } else if (control.isContentEditable) {
+      control.textContent = value
     } else {
       const prototype = control instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
       Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(control, value)
@@ -51,7 +56,9 @@ function fillActiveForm(profile, credential, aiMappings = {}, includeOptional = 
   }
 
   controls.forEach((control, index) => {
-    const label = control.labels ? [...control.labels].map((item) => item.textContent).join(' ') : ''
+    const referencedText = (control.getAttribute('aria-labelledby') ?? '').split(/\s+/).map((id) => document.getElementById(id)?.textContent).filter(Boolean).join(' ')
+    const containerText = control.closest('[role="listitem"], [data-item-id], form > div')?.innerText?.slice(0, 500) ?? ''
+    const label = [control.labels ? [...control.labels].map((item) => item.textContent).join(' ') : '', control.getAttribute('aria-label'), referencedText, containerText].filter(Boolean).join(' ')
     const identity = normalized([control.name, control.id, control.getAttribute('autocomplete'), control.getAttribute('aria-label'), control.getAttribute('placeholder'), label].join(' '))
     const key = aiMappings[index] ?? Object.entries(aliases).find(([, names]) => names.some((name) => identity.includes(name)))?.[0] ?? (identity === 'name' ? 'fullName' : undefined)
     const required = control.required || control.getAttribute('aria-required') === 'true'
@@ -109,6 +116,7 @@ async function mappingPlan(tabId, vault, hostname) {
 
 async function fillTab(tabId, includeOptional = false) {
   const vault = getVault()
+  if (!Object.values(vault.profile).some((value) => String(value).trim())) throw new Error('Import your SnapFill details into the unlocked vault before filling a form.')
   const tab = await chrome.tabs.get(tabId)
   const hostname = tab.url ? new URL(tab.url).hostname : ''
   const credential = vault.credentials.find((item) => item.hostname === hostname)
@@ -122,6 +130,8 @@ async function fillTab(tabId, includeOptional = false) {
 }
 
 async function waitForLoad(tabId) {
+  const initial = await chrome.tabs.get(tabId)
+  if (initial.status === 'complete') return
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => { chrome.tabs.onUpdated.removeListener(listener); reject(new Error('The form took too long to load.')) }, 30000)
     function listener(updatedTabId, changeInfo) {
@@ -137,8 +147,6 @@ async function waitForLoad(tabId) {
 
 async function openAndFill(url, includeOptional = false) {
   const parsed = new URL(url)
-  const granted = await chrome.permissions.request({ origins: [`${parsed.origin}/*`] })
-  if (!granted) throw new Error('Site access is needed to fill that form.')
   const tab = await chrome.tabs.create({ url: parsed.toString(), active: true })
   if (!tab.id) throw new Error('Could not open the form.')
   await waitForLoad(tab.id)
