@@ -21,6 +21,11 @@ function formDescriptors() {
 
 function fillActiveForm(profile, credential, aiMappings = {}, includeOptional = false) {
   const normalized = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
+  const questionIdentity = (control) => normalized([
+    control.labels ? [...control.labels].map((item) => item.textContent).join(' ') : '',
+    control.getAttribute('aria-label'),
+    (control.getAttribute('aria-labelledby') ?? '').split(/\s+/).map((id) => document.getElementById(id)?.textContent).filter(Boolean).join(' '),
+  ].filter(Boolean).join(' ')).replaceAll('youranswer', '').replaceAll('required', '')
   const nameParts = String(profile.fullName ?? '').trim().split(/\s+/)
   const aliases = {
     fullName: ['fullname', 'applicantname', 'nameoftheapplicant', 'legalname'],
@@ -40,6 +45,7 @@ function fillActiveForm(profile, credential, aiMappings = {}, includeOptional = 
 
   function setValue(control, value) {
     if (!value || control.disabled || control.readOnly || control.value || (control.isContentEditable && control.textContent?.trim())) return false
+    control.focus()
     if (control instanceof HTMLSelectElement) {
       const option = [...control.options].find((item) => normalized(item.value) === normalized(value) || normalized(item.text) === normalized(value))
       if (!option) return false
@@ -50,8 +56,9 @@ function fillActiveForm(profile, credential, aiMappings = {}, includeOptional = 
       const prototype = control instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
       Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(control, value)
     }
-    control.dispatchEvent(new Event('input', { bubbles: true }))
+    control.dispatchEvent(new InputEvent('input', { bubbles: true, data: value, inputType: 'insertText' }))
     control.dispatchEvent(new Event('change', { bubbles: true }))
+    control.dispatchEvent(new Event('blur', { bubbles: true }))
     return true
   }
 
@@ -60,7 +67,8 @@ function fillActiveForm(profile, credential, aiMappings = {}, includeOptional = 
     const containerText = control.closest('[role="listitem"], [data-item-id], form > div')?.innerText?.slice(0, 500) ?? ''
     const label = [control.labels ? [...control.labels].map((item) => item.textContent).join(' ') : '', control.getAttribute('aria-label'), referencedText, containerText].filter(Boolean).join(' ')
     const identity = normalized([control.name, control.id, control.getAttribute('autocomplete'), control.getAttribute('aria-label'), control.getAttribute('placeholder'), label].join(' '))
-    const key = aiMappings[index] ?? Object.entries(aliases).find(([, names]) => names.some((name) => identity.includes(name)))?.[0] ?? (identity === 'name' ? 'fullName' : undefined)
+    const question = questionIdentity(control)
+    const key = aiMappings[index] ?? (['name', 'yourname', 'fullname', 'yourfullname'].includes(question) ? 'fullName' : undefined) ?? Object.entries(aliases).find(([, names]) => names.some((name) => identity.includes(name)))?.[0]
     const required = control.required || control.getAttribute('aria-required') === 'true'
     const credentialField = key === 'username' || key === 'password'
     if (key && (includeOptional || required || credentialField) && setValue(control, values[key])) {
@@ -164,11 +172,19 @@ async function openAndFill(url, includeOptional = false) {
   const parsed = new URL(url)
   const hasAccess = await chrome.permissions.contains({ origins: [`${parsed.origin}/*`] })
   if (!hasAccess) throw new Error(`Allow access to ${parsed.hostname} in the SnapFill extension before filling this form.`)
-  const tab = await chrome.tabs.create({ url: parsed.toString(), active: true })
+  const tab = await chrome.tabs.create({ url: parsed.toString(), active: false })
   if (!tab.id) throw new Error('Could not open the form.')
-  await waitForLoad(tab.id)
-  await waitForFillableControls(tab.id)
-  return fillTab(tab.id, includeOptional)
+  try {
+    await waitForLoad(tab.id)
+    await waitForFillableControls(tab.id)
+    const result = await fillTab(tab.id, includeOptional)
+    if (!result.filled) throw new Error('No reviewed details matched the fillable fields on this form.')
+    await chrome.tabs.update(tab.id, { active: true })
+    return result
+  } catch (error) {
+    await chrome.tabs.remove(tab.id).catch(() => undefined)
+    throw error
+  }
 }
 
 async function importSnapFill() {
