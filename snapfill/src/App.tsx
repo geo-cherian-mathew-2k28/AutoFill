@@ -78,28 +78,6 @@ function App() {
     toast.success('Saved details cleared from this device')
   }
 
-  function downloadJson() {
-    const payload = JSON.stringify({ documentType: document.displayName, fields: Object.fromEntries(document.fields.map((field) => [field.key, field.value])) }, null, 2)
-    const blob = new Blob([payload], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const anchor = window.document.createElement('a')
-    anchor.href = url
-    anchor.download = 'snapfill-details.json'
-    anchor.click()
-    URL.revokeObjectURL(url)
-    toast.success('JSON downloaded')
-  }
-
-  async function copyDetails() {
-    const details = document.fields.map((field) => `${field.label}: ${field.value}`).join('\n')
-    try {
-      await navigator.clipboard.writeText(details)
-      toast.success('Details copied to clipboard')
-    } catch {
-      toast.error('Clipboard access was unavailable')
-    }
-  }
-
   const onHome = () => setView('landing')
   const onScan = () => setView('scan')
 
@@ -112,7 +90,7 @@ function App() {
         {view === 'processing' && <ProcessingPage progress={progress} />}
         {view === 'results' && <ResultsPage document={document} onChange={updateFields} onContinue={() => setView('autofill')} onBack={onScan} />}
         {view === 'autofill' && <AutoFillPage document={document} onComplete={finishForm} onBack={() => setView('results')} />}
-        {view === 'success' && <SuccessPage document={document} onDownload={downloadJson} onCopy={copyDetails} onStartAgain={onHome} />}
+        {view === 'success' && <SuccessPage document={document} onStartAgain={onScan} />}
       </main>
       <PrivacyBadge />
       <Toaster position="top-center" richColors />

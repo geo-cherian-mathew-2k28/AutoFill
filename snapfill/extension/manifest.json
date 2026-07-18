@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "SnapFill Local Agent",
+  "version": "0.1.0",
+  "description": "A local encrypted vault and user-triggered form autofill agent.",
+  "minimum_chrome_version": "120",
+  "permissions": ["activeTab", "scripting", "storage", "tabs"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "SnapFill Local Agent",
+    "default_popup": "popup.html"
+  }
+}

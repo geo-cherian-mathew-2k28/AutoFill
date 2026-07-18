@@ -1,32 +1,26 @@
-# React + TypeScript + Vite
+# SnapFill
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Private, local document-to-form autofill. The React app extracts and reviews document fields; the companion browser extension opens a destination form and fills it on the user's explicit request.
 
-Currently, two official plugins are available:
+## Run the app
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Use the local agent
+
+1. In Chrome, open `chrome://extensions`, enable Developer mode, and use **Load unpacked** on `snapfill/extension`.
+2. Scan a document in SnapFill and save the reviewed details locally.
+3. With the SnapFill tab active, open the extension and choose **Import current SnapFill data**.
+4. In the extension, paste a destination form URL and choose **Open and autofill**, or open a form yourself and choose **Autofill current form**.
+
+The extension asks for permission only for the destination site you select. It maps common form labels for name, date of birth, document number, address, guardian name, username, and password. Credentials are used only on an exact matching hostname.
+
+## Privacy model
+
+- Document extraction runs in the browser.
+- The web app stores reviewed fields in local browser storage.
+- The extension stores its vault encrypted locally with AES-GCM. Its key is derived from the user passphrase with PBKDF2 and only retained while unlocked.
+- No backend, account, analytics, or cloud AI is part of the product flow.

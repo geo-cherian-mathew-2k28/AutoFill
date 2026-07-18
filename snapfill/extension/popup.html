@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SnapFill Agent</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header><span class="mark">S</span><div><strong>SnapFill Agent</strong><p id="status">Checking vault</p></div></header>
+
+      <section id="unlock-panel" class="panel">
+        <label id="passphrase-label" for="passphrase">Vault passphrase</label>
+        <input id="passphrase" type="password" autocomplete="new-password" minlength="10" />
+        <button id="unlock-button" class="primary">Unlock vault</button>
+      </section>
+
+      <section id="vault-panel" hidden>
+        <div class="actions">
+          <button id="import-button">Import current SnapFill data</button>
+          <button id="fill-current-button" class="primary">Autofill current form</button>
+        </div>
+
+        <form id="target-form" class="panel">
+          <label for="target-url">Target form URL</label>
+          <input id="target-url" type="url" placeholder="https://example.com/form" />
+          <button class="primary" type="submit">Open and autofill</button>
+        </form>
+
+        <form id="profile-form" class="panel">
+          <h2>Personal details</h2>
+          <label for="fullName">Full name</label><input id="fullName" name="fullName" autocomplete="name" />
+          <label for="dateOfBirth">Date of birth</label><input id="dateOfBirth" name="dateOfBirth" />
+          <label for="documentNumber">Document number</label><input id="documentNumber" name="documentNumber" />
+          <label for="address">Address</label><input id="address" name="address" autocomplete="street-address" />
+          <label for="guardianName">Guardian name</label><input id="guardianName" name="guardianName" />
+          <button type="submit">Save details</button>
+        </form>
+
+        <form id="credential-form" class="panel">
+          <h2>Site credential</h2>
+          <label for="credential-url">Site URL</label><input id="credential-url" type="url" required placeholder="https://portal.example.com" />
+          <label for="username">Username or email</label><input id="username" autocomplete="username" />
+          <label for="password">Password</label><input id="password" type="password" autocomplete="new-password" />
+          <button type="submit">Save credential</button>
+        </form>
+        <button id="lock-button" class="quiet">Lock vault</button>
+      </section>
+      <p id="message" role="status"></p>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

@@ -19,11 +19,3 @@ export function saveDocument(document: ExtractedDocument) {
 export function clearSavedDocument() {
   window.localStorage.removeItem(STORAGE_KEY)
 }
-
-export function createPrefilledUrl(rawUrl: string, values: Record<string, string>) {
-  const url = new URL(rawUrl)
-  Object.entries(values).forEach(([key, value]) => {
-    if (value.trim()) url.searchParams.set(key, value.trim())
-  })
-  return url.toString()
-}
