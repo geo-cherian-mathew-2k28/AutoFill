@@ -46,7 +46,7 @@ function fillActiveForm(profile, credential, aiMappings = {}, includeOptional = 
   const controls = [...document.querySelectorAll('input, textarea, select, [contenteditable="true"][role="textbox"]')].filter((control) => !['hidden', 'submit', 'button', 'reset', 'radio', 'checkbox'].includes(control.type))
 
   function setValue(control, value) {
-    if (!value || control.disabled || control.readOnly || control.value || (control.isContentEditable && control.textContent?.trim())) return false
+    if (!value || control.disabled || (control.value && normalized(control.value) !== 'youranswer') || (control.isContentEditable && control.textContent?.trim())) return false
     control.focus()
     if (control instanceof HTMLSelectElement) {
       const option = [...control.options].find((item) => normalized(item.value) === normalized(value) || normalized(item.text) === normalized(value))

@@ -49,7 +49,7 @@ function fillGoogleForm(profile, mappings, includeOptional) {
     const key = mappings[index] ?? (['name', 'yourname', 'fullname', 'yourfullname'].includes(question) ? 'fullName' : undefined) ?? Object.entries(aliases).find(([, names]) => names.some((name) => identity.includes(name)))?.[0]
     const value = key ? profile[key] : ''
     const required = control.required || control.getAttribute('aria-required') === 'true'
-    if (!key || !value || (!includeOptional && !required) || control.disabled || control.readOnly || control.value) return
+    if (!key || !value || (!includeOptional && !required)) return
 
     control.focus()
     if (control instanceof HTMLSelectElement) {

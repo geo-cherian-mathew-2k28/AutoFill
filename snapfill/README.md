@@ -17,6 +17,8 @@ npm run dev
 4. On the **Agent ready** screen, paste a destination form URL and select **Autofill this form**. The agent writes only the reviewed fields to its unlocked local vault, opens the selected form, and fills it.
 5. The supplied Google Forms test URL works directly. For a new site, use the extension's target URL control once to grant that site permission, then return to the web agent.
 
+When SnapFill is opened in an embedded browser that cannot load Chrome extensions, the local development agent opens an isolated Chrome profile, fills the selected form there, and leaves that form open. The reviewed profile is sent only to the local `127.0.0.1` agent process and the destination form.
+
 The extension asks for permission only for the destination site you select. It maps common form labels for name, date of birth, document number, address, guardian name, username, and password. Credentials are used only on an exact matching hostname. The web agent lets the user include or exclude optional reviewed details. Each run creates an encrypted local receipt with the hostname, field categories, and strategy, never the values themselves.
 
 ## Privacy model

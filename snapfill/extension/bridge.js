@@ -4,7 +4,7 @@ const RESPONSE_CHANNEL = 'snapfill-agent-response'
 window.addEventListener('message', async (event) => {
   if (event.source !== window || event.origin !== window.location.origin) return
   const request = event.data
-  if (request?.channel !== REQUEST_CHANNEL || request.type !== 'webAgentFill' || typeof request.requestId !== 'string') return
+  if (request?.channel !== REQUEST_CHANNEL || !['status', 'webAgentFill'].includes(request.type) || typeof request.requestId !== 'string') return
 
   try {
     const response = await chrome.runtime.sendMessage({ type: request.type, ...request.payload })
