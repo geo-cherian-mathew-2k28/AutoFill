@@ -1,4 +1,4 @@
-import { createVault, getVault, lockVault, saveCredential, saveDocument, saveProfile, summary, unlockVault, vaultExists } from './vault.js'
+import { createVault, getVault, lockVault, recordReceipt, saveCredential, saveDocument, saveProfile, saveRecipe, saveSitePolicy, summary, unlockVault, vaultExists } from './vault.js'
 
 function formDescriptors() {
   return [...document.querySelectorAll('input, textarea, select')].map((control, index) => {
@@ -9,13 +9,14 @@ function formDescriptors() {
       name: control.name,
       id: control.id,
       type: control.type,
+      required: control.required || control.getAttribute('aria-required') === 'true',
       autocomplete: control.getAttribute('autocomplete'),
       placeholder: control.getAttribute('placeholder'),
     }
   })
 }
 
-function fillActiveForm(profile, credential, aiMappings = {}) {
+function fillActiveForm(profile, credential, aiMappings = {}, includeOptional = false) {
   const normalized = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
   const nameParts = String(profile.fullName ?? '').trim().split(/\s+/)
   const aliases = {
@@ -31,6 +32,7 @@ function fillActiveForm(profile, credential, aiMappings = {}) {
   }
   const values = { ...profile, firstName: nameParts[0] ?? '', lastName: nameParts.slice(1).join(' '), username: credential?.username ?? '', password: credential?.password ?? '' }
   let filled = 0
+  const sharedKeys = []
   const controls = [...document.querySelectorAll('input, textarea, select')]
 
   function setValue(control, value) {
@@ -52,9 +54,14 @@ function fillActiveForm(profile, credential, aiMappings = {}) {
     const label = control.labels ? [...control.labels].map((item) => item.textContent).join(' ') : ''
     const identity = normalized([control.name, control.id, control.getAttribute('autocomplete'), control.getAttribute('aria-label'), control.getAttribute('placeholder'), label].join(' '))
     const key = aiMappings[index] ?? Object.entries(aliases).find(([, names]) => names.some((name) => identity.includes(name)))?.[0] ?? (identity === 'name' ? 'fullName' : undefined)
-    if (key && setValue(control, values[key])) filled += 1
+    const required = control.required || control.getAttribute('aria-required') === 'true'
+    const credentialField = key === 'username' || key === 'password'
+    if (key && (includeOptional || required || credentialField) && setValue(control, values[key])) {
+      filled += 1
+      sharedKeys.push(key)
+    }
   })
-  return { filled, total: controls.length, hostname: location.hostname }
+  return { filled, total: controls.length, hostname: location.hostname, sharedKeys: [...new Set(sharedKeys)] }
 }
 
 async function activeTab() {
@@ -80,15 +87,38 @@ async function aiMappingsFor(tabId, profile) {
   return Object.fromEntries((body.mappings ?? []).map((mapping) => [mapping.fieldIndex, mapping.profileKey]))
 }
 
-async function fillTab(tabId) {
+async function formFingerprint(hostname, fields) {
+  const source = `${hostname}:${fields.map((field) => [field.label, field.name, field.type, field.required].join('|')).join('||')}`
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(source))
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+async function mappingPlan(tabId, vault, hostname) {
+  const [description] = await chrome.scripting.executeScript({ target: { tabId }, func: formDescriptors })
+  const fields = description.result ?? []
+  const fingerprint = await formFingerprint(hostname, fields)
+  const recipe = vault.recipes.find((item) => item.fingerprint === fingerprint)
+  if (recipe) return { fingerprint, mappings: recipe.mappings, strategy: 'local-recipe' }
+  try {
+    const mappings = await aiMappingsFor(tabId, vault.profile)
+    return { fingerprint, mappings, strategy: Object.keys(mappings).length ? 'ai' : 'heuristic' }
+  } catch {
+    return { fingerprint, mappings: {}, strategy: 'heuristic' }
+  }
+}
+
+async function fillTab(tabId, includeOptional = false) {
   const vault = getVault()
   const tab = await chrome.tabs.get(tabId)
   const hostname = tab.url ? new URL(tab.url).hostname : ''
   const credential = vault.credentials.find((item) => item.hostname === hostname)
-  let aiMappings = {}
-  try { aiMappings = await aiMappingsFor(tabId, vault.profile) } catch { /* Heuristic matching remains available when AI is not configured. */ }
-  const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: fillActiveForm, args: [vault.profile, credential, aiMappings] })
-  return { ...result.result, aiMappings: Object.keys(aiMappings).length }
+  await saveSitePolicy(hostname, { includeOptional })
+  const plan = await mappingPlan(tabId, vault, hostname)
+  const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: fillActiveForm, args: [vault.profile, credential, plan.mappings, includeOptional] })
+  if (plan.strategy === 'ai') await saveRecipe({ fingerprint: plan.fingerprint, hostname, mappings: plan.mappings, createdAt: new Date().toISOString() })
+  const receipt = { id: crypto.randomUUID(), hostname, createdAt: new Date().toISOString(), fieldKeys: result.result.sharedKeys, strategy: plan.strategy, includeOptional }
+  await recordReceipt(receipt)
+  return { ...result.result, aiMappings: Object.keys(plan.mappings).length, strategy: plan.strategy }
 }
 
 async function waitForLoad(tabId) {
@@ -105,7 +135,7 @@ async function waitForLoad(tabId) {
   })
 }
 
-async function openAndFill(url) {
+async function openAndFill(url, includeOptional = false) {
   const parsed = new URL(url)
   const granted = await chrome.permissions.request({ origins: [`${parsed.origin}/*`] })
   if (!granted) throw new Error('Site access is needed to fill that form.')
@@ -113,7 +143,7 @@ async function openAndFill(url) {
   if (!tab.id) throw new Error('Could not open the form.')
   await waitForLoad(tab.id)
   await new Promise((resolve) => setTimeout(resolve, 600))
-  return fillTab(tab.id)
+  return fillTab(tab.id, includeOptional)
 }
 
 async function importSnapFill() {
@@ -139,8 +169,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     saveProfile: async () => saveProfile(message.profile),
     saveCredential: async () => saveCredential(message.credential),
     importSnapFill: async () => importSnapFill(),
-    fillCurrent: async () => fillTab((await activeTab()).id),
-    openAndFill: async () => openAndFill(message.url),
+    fillCurrent: async () => fillTab((await activeTab()).id, message.includeOptional),
+    openAndFill: async () => openAndFill(message.url, message.includeOptional),
   }
   const handler = handlers[message.type]
   if (!handler) return false

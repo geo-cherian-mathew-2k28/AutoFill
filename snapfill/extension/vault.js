@@ -20,7 +20,21 @@ async function deriveKey(passphrase, salt) {
 }
 
 function emptyVault() {
-  return { profile: {}, credentials: [], documents: [] }
+  return { profile: {}, credentials: [], documents: [], recipes: [], receipts: [], sitePolicies: {} }
+}
+
+function normalizeVault(value) {
+  const defaults = emptyVault()
+  return {
+    ...defaults,
+    ...value,
+    profile: value?.profile ?? {},
+    credentials: Array.isArray(value?.credentials) ? value.credentials : [],
+    documents: Array.isArray(value?.documents) ? value.documents : [],
+    recipes: Array.isArray(value?.recipes) ? value.recipes : [],
+    receipts: Array.isArray(value?.receipts) ? value.receipts : [],
+    sitePolicies: value?.sitePolicies ?? {},
+  }
 }
 
 async function persist() {
@@ -52,7 +66,7 @@ export async function unlockVault(passphrase) {
   encryptionKey = await deriveKey(passphrase, vaultSalt)
   try {
     const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64(encrypted.iv) }, encryptionKey, fromBase64(encrypted.ciphertext))
-    unlockedVault = JSON.parse(decoder.decode(plaintext))
+    unlockedVault = normalizeVault(JSON.parse(decoder.decode(plaintext)))
     return summary()
   } catch {
     encryptionKey = null
@@ -73,12 +87,15 @@ export function getVault() {
 }
 
 export function summary() {
-  if (!unlockedVault) return { unlocked: false, profile: {}, credentials: [], documentCount: 0 }
+  if (!unlockedVault) return { unlocked: false, profile: {}, credentials: [], documentCount: 0, recipeCount: 0, receiptCount: 0, lastReceipt: null }
   return {
     unlocked: true,
     profile: unlockedVault.profile,
     credentials: unlockedVault.credentials.map(({ hostname, username }) => ({ hostname, username })),
     documentCount: unlockedVault.documents.length,
+    recipeCount: unlockedVault.recipes.length,
+    receiptCount: unlockedVault.receipts.length,
+    lastReceipt: unlockedVault.receipts[0] ?? null,
   }
 }
 
@@ -101,6 +118,25 @@ export async function saveCredential(credential) {
 export async function saveDocument(document) {
   const vault = getVault()
   vault.documents = [...vault.documents.filter((item) => item.id !== document.id), document]
+  await persist()
+  return summary()
+}
+
+export async function saveRecipe(recipe) {
+  const vault = getVault()
+  vault.recipes = [recipe, ...vault.recipes.filter((item) => item.fingerprint !== recipe.fingerprint)].slice(0, 50)
+  await persist()
+}
+
+export async function saveSitePolicy(hostname, policy) {
+  const vault = getVault()
+  vault.sitePolicies[hostname] = { ...vault.sitePolicies[hostname], ...policy }
+  await persist()
+}
+
+export async function recordReceipt(receipt) {
+  const vault = getVault()
+  vault.receipts = [receipt, ...vault.receipts].slice(0, 100)
   await persist()
   return summary()
 }

@@ -26,7 +26,8 @@ function render(data, exists = true) {
   vaultPanel.hidden = !unlocked
   unlockButton.textContent = exists ? 'Unlock vault' : 'Create vault'
   document.querySelector('#passphrase-label').textContent = exists ? 'Vault passphrase' : 'Create vault passphrase'
-  status.textContent = unlocked ? `${data.credentials.length} site credential${data.credentials.length === 1 ? '' : 's'} saved` : exists ? 'Vault locked' : 'Create local vault'
+  status.textContent = unlocked ? `${data.recipeCount} local recipe${data.recipeCount === 1 ? '' : 's'} · ${data.receiptCount} disclosure receipt${data.receiptCount === 1 ? '' : 's'}` : exists ? 'Vault locked' : 'Create local vault'
+  document.querySelector('#receipt-summary').textContent = unlocked && data.lastReceipt ? `${data.lastReceipt.hostname} · ${data.lastReceipt.fieldKeys.length} field categories shared` : ''
   if (unlocked) Object.entries(data.profile).forEach(([key, value]) => setValue(key, value))
 }
 
@@ -50,12 +51,12 @@ document.querySelector('#import-button').addEventListener('click', async () => {
 })
 
 document.querySelector('#fill-current-button').addEventListener('click', async () => {
-  try { const result = await send('fillCurrent'); notify(`${result.filled} field${result.filled === 1 ? '' : 's'} filled${result.aiMappings ? ` with ${result.aiMappings} AI match${result.aiMappings === 1 ? '' : 'es'}` : ''}`) } catch (error) { notify(error.message, true) }
+  try { const result = await send('fillCurrent', { includeOptional: document.querySelector('#include-optional').checked }); notify(`${result.filled} field${result.filled === 1 ? '' : 's'} filled · ${result.strategy}`) } catch (error) { notify(error.message, true) }
 })
 
 document.querySelector('#target-form').addEventListener('submit', async (event) => {
   event.preventDefault()
-  try { const result = await send('openAndFill', { url: document.querySelector('#target-url').value }); notify(`${result.filled} field${result.filled === 1 ? '' : 's'} filled${result.aiMappings ? ` with ${result.aiMappings} AI match${result.aiMappings === 1 ? '' : 'es'}` : ''}`) } catch (error) { notify(error.message, true) }
+  try { const result = await send('openAndFill', { url: document.querySelector('#target-url').value, includeOptional: document.querySelector('#include-optional').checked }); notify(`${result.filled} field${result.filled === 1 ? '' : 's'} filled · ${result.strategy}`) } catch (error) { notify(error.message, true) }
 })
 
 document.querySelector('#profile-form').addEventListener('submit', async (event) => {

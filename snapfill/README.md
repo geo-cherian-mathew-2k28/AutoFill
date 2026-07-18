@@ -1,6 +1,6 @@
 # SnapFill
 
-Private, local document-to-form autofill. The React app extracts and reviews document fields; the companion browser extension opens a destination form and fills it on the user's explicit request.
+SnapFill is a private, local consent agent for web forms. The React app extracts and reviews document fields; the companion browser extension opens a destination form, fills the minimum approved data, and learns local form recipes for future visits.
 
 ## Run the app
 
@@ -16,7 +16,7 @@ npm run dev
 3. With the SnapFill tab active, open the extension and choose **Import current SnapFill data**.
 4. In the extension, paste a destination form URL and choose **Open and autofill**, or open a form yourself and choose **Autofill current form**.
 
-The extension asks for permission only for the destination site you select. It maps common form labels for name, date of birth, document number, address, guardian name, username, and password. Credentials are used only on an exact matching hostname.
+The extension asks for permission only for the destination site you select. It maps common form labels for name, date of birth, document number, address, guardian name, username, and password. Credentials are used only on an exact matching hostname. By default it fills only required fields; optional details need an explicit toggle. Each run creates an encrypted local receipt with the hostname, field categories, and strategy, never the values themselves.
 
 ## Privacy model
 

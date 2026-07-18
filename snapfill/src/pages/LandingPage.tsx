@@ -1,4 +1,4 @@
-import { ArrowRight, DatabaseZap, FileCheck2, ShieldCheck, Trash2, WifiOff, Zap } from 'lucide-react'
+import { ArrowRight, DatabaseZap, FileCheck2, ScanSearch, ShieldCheck, Trash2, Zap } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 import { Button } from '@/components/ui/button'
@@ -13,18 +13,18 @@ interface LandingPageProps {
 }
 
 const features = [
-  { icon: ShieldCheck, title: 'Local processing', detail: 'Private by default' },
-  { icon: WifiOff, title: 'Works offline', detail: 'No account required' },
-  { icon: Zap, title: 'Instant form fill', detail: 'Review, then reuse' },
+  { icon: ShieldCheck, title: 'Minimum disclosure', detail: 'Required fields first' },
+  { icon: ScanSearch, title: 'Local form memory', detail: 'Learns approved mappings' },
+  { icon: Zap, title: 'Consent receipts', detail: 'Auditable, value-free history' },
 ]
 
 export function LandingPage({ onScan, onTryDemo, hasSavedData, onUseSavedData, onClearSavedData }: LandingPageProps) {
   return (
     <div className="mx-auto max-w-6xl px-5 pb-20 pt-14 md:px-8 md:pt-24">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="mx-auto max-w-3xl text-center">
-        <span className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-brand"><ShieldCheck size={16} /> Private. Instant. Offline.</span>
-        <h1 className="mt-6 text-4xl font-bold leading-tight text-ink sm:text-5xl">Fill forms instantly. Keep your data private.</h1>
-        <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-muted sm:text-lg">SnapFill reads your document in this browser, lets you check every field, and puts the details straight into a ready form.</p>
+        <span className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-brand"><ShieldCheck size={16} /> Local consent agent</span>
+        <h1 className="mt-6 text-4xl font-bold leading-tight text-ink sm:text-5xl">Share less. Complete more.</h1>
+        <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-muted sm:text-lg">SnapFill learns how a form works, selects only approved details, and keeps a private record of each disclosure without storing the values it shared.</p>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
           <Button size="lg" onClick={onScan}><FileCheck2 size={19} /> Scan document</Button>
           <Button size="lg" variant="secondary" onClick={() => onTryDemo('aadhaar')}>Try instant demo <ArrowRight size={18} /></Button>
