@@ -1,5 +1,7 @@
 import { createVault, getVault, lockVault, recordReceipt, saveCredential, saveDocument, saveProfile, saveRecipe, saveSitePolicy, summary, unlockVault, vaultExists } from './vault.js'
 
+const pendingGoogleForms = new Map()
+
 function formDescriptors() {
   const controls = [...document.querySelectorAll('input, textarea, select, [contenteditable="true"][role="textbox"]')]
   return controls.filter((control) => !['hidden', 'submit', 'button', 'reset', 'radio', 'checkbox'].includes(control.type)).map((control, index) => {
@@ -85,9 +87,7 @@ async function activeTab() {
   return tab
 }
 
-async function aiMappingsFor(tabId, profile) {
-  const [description] = await chrome.scripting.executeScript({ target: { tabId }, func: formDescriptors })
-  const fields = description.result ?? []
+async function aiMappingsForFields(fields, profile) {
   if (!fields.length) return {}
   const response = await fetch('http://127.0.0.1:5174/api/resolve-form', {
     method: 'POST',
@@ -102,24 +102,41 @@ async function aiMappingsFor(tabId, profile) {
   return Object.fromEntries((body.mappings ?? []).map((mapping) => [mapping.fieldIndex, mapping.profileKey]))
 }
 
+async function aiMappingsFor(tabId, profile) {
+  const [description] = await chrome.scripting.executeScript({ target: { tabId }, func: formDescriptors })
+  return aiMappingsForFields(description.result ?? [], profile)
+}
+
 async function formFingerprint(hostname, fields) {
   const source = `${hostname}:${fields.map((field) => [field.label, field.name, field.type, field.required].join('|')).join('||')}`
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(source))
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-async function mappingPlan(tabId, vault, hostname) {
-  const [description] = await chrome.scripting.executeScript({ target: { tabId }, func: formDescriptors })
-  const fields = description.result ?? []
+function hasLocalFieldMatch(fields) {
+  const knownLabels = ['name', 'fullname', 'firstname', 'lastname', 'dateofbirth', 'dob', 'address', 'guardianname', 'documentnumber', 'aadhaar', 'pannumber', 'license']
+  return fields.some((field) => {
+    const label = String(field.label ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
+    return knownLabels.some((known) => label === known || label.startsWith(known))
+  })
+}
+
+async function mappingPlanForFields(vault, hostname, fields) {
   const fingerprint = await formFingerprint(hostname, fields)
   const recipe = vault.recipes.find((item) => item.fingerprint === fingerprint)
   if (recipe) return { fingerprint, mappings: recipe.mappings, strategy: 'local-recipe' }
+  if (hasLocalFieldMatch(fields)) return { fingerprint, mappings: {}, strategy: 'heuristic' }
   try {
-    const mappings = await aiMappingsFor(tabId, vault.profile)
+    const mappings = await aiMappingsForFields(fields, vault.profile)
     return { fingerprint, mappings, strategy: Object.keys(mappings).length ? 'ai' : 'heuristic' }
   } catch {
     return { fingerprint, mappings: {}, strategy: 'heuristic' }
   }
+}
+
+async function mappingPlan(tabId, vault, hostname) {
+  const [description] = await chrome.scripting.executeScript({ target: { tabId }, func: formDescriptors })
+  return mappingPlanForFields(vault, hostname, description.result ?? [])
 }
 
 async function fillTab(tabId, includeOptional = false) {
@@ -172,6 +189,7 @@ async function openAndFill(url, includeOptional = false) {
   const parsed = new URL(url)
   const hasAccess = await chrome.permissions.contains({ origins: [`${parsed.origin}/*`] })
   if (!hasAccess) throw new Error(`Allow access to ${parsed.hostname} in the SnapFill extension before filling this form.`)
+  if (parsed.hostname === 'docs.google.com' && parsed.pathname.startsWith('/forms/')) return openGoogleFormAndFill(parsed.toString(), includeOptional)
   const tab = await chrome.tabs.create({ url: parsed.toString(), active: false })
   if (!tab.id) throw new Error('Could not open the form.')
   try {
@@ -182,9 +200,52 @@ async function openAndFill(url, includeOptional = false) {
     await chrome.tabs.update(tab.id, { active: true })
     return result
   } catch (error) {
-    await chrome.tabs.remove(tab.id).catch(() => undefined)
+    await chrome.tabs.update(tab.id, { active: true }).catch(() => undefined)
     throw error
   }
+}
+
+async function openGoogleFormAndFill(url, includeOptional) {
+  const tab = await chrome.tabs.create({ url, active: true })
+  if (!tab.id) throw new Error('Could not open the Google Form.')
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      pendingGoogleForms.delete(tab.id)
+      reject(new Error('SnapFill did not receive the Google Form fields. Reload the extension and try again.'))
+    }, 30000)
+    pendingGoogleForms.set(tab.id, { includeOptional, resolve, reject, timeout })
+  })
+}
+
+async function prepareGoogleForm(message, sender) {
+  const tabId = sender.tab?.id
+  const pending = tabId ? pendingGoogleForms.get(tabId) : null
+  if (!pending) return { ignore: true }
+  const vault = getVault()
+  const hostname = sender.tab?.url ? new URL(sender.tab.url).hostname : 'docs.google.com'
+  const fields = Array.isArray(message.fields) ? message.fields : []
+  const plan = await mappingPlanForFields(vault, hostname, fields)
+  pending.plan = plan
+  pending.hostname = hostname
+  await saveSitePolicy(hostname, { includeOptional: pending.includeOptional })
+  return { profile: vault.profile, mappings: plan.mappings, includeOptional: pending.includeOptional }
+}
+
+async function finishGoogleForm(message, sender) {
+  const tabId = sender.tab?.id
+  const pending = tabId ? pendingGoogleForms.get(tabId) : null
+  if (!pending) return { ignore: true }
+  clearTimeout(pending.timeout)
+  pendingGoogleForms.delete(tabId)
+  const result = message.result ?? {}
+  if (!result.filled) {
+    pending.reject(new Error('No reviewed details matched the fillable fields on this Google Form.'))
+    return { filled: 0 }
+  }
+  if (pending.plan.strategy === 'ai') await saveRecipe({ fingerprint: pending.plan.fingerprint, hostname: pending.hostname, mappings: pending.plan.mappings, createdAt: new Date().toISOString() })
+  await recordReceipt({ id: crypto.randomUUID(), hostname: pending.hostname, createdAt: new Date().toISOString(), fieldKeys: result.sharedKeys ?? [], strategy: pending.plan.strategy, includeOptional: pending.includeOptional })
+  pending.resolve({ ...result, aiMappings: Object.keys(pending.plan.mappings).length, strategy: pending.plan.strategy })
+  return { filled: result.filled }
 }
 
 async function importSnapFill() {
@@ -211,7 +272,7 @@ async function webAgentFill({ url, profile, document, includeOptional = true }) 
   return openAndFill(url, Boolean(includeOptional))
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handlers = {
     status: async () => ({ exists: await vaultExists(), ...summary() }),
     create: async () => createVault(message.passphrase),
@@ -221,6 +282,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     saveCredential: async () => saveCredential(message.credential),
     importSnapFill: async () => importSnapFill(),
     webAgentFill: async () => webAgentFill(message),
+    googleFormReady: async () => prepareGoogleForm(message, sender),
+    googleFormFilled: async () => finishGoogleForm(message, sender),
     fillCurrent: async () => fillTab((await activeTab()).id, message.includeOptional),
     openAndFill: async () => openAndFill(message.url, message.includeOptional),
   }

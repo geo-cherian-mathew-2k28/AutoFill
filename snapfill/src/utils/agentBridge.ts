@@ -24,7 +24,7 @@ export function fillWithLocalAgent(url: string, profile: AgentProfile, document:
     const timeout = window.setTimeout(() => {
       window.removeEventListener('message', receive)
       reject(new Error('SnapFill Agent was not detected. Load or reload the local browser extension, then try again.'))
-    }, 5000)
+    }, 45000)
 
     function receive(event: MessageEvent<unknown>) {
       if (event.source !== window || event.origin !== window.location.origin) return

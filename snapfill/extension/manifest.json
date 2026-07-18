@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SnapFill Local Agent",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "A local encrypted vault and user-triggered form autofill agent.",
   "minimum_chrome_version": "120",
   "permissions": ["activeTab", "scripting", "storage", "tabs"],
@@ -16,6 +16,11 @@
       "matches": ["http://127.0.0.1:5174/*"],
       "js": ["bridge.js"],
       "run_at": "document_start"
+    },
+    {
+      "matches": ["https://docs.google.com/forms/*"],
+      "js": ["google-form.js"],
+      "run_at": "document_idle"
     }
   ],
   "action": {
