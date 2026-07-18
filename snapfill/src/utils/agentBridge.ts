@@ -60,9 +60,8 @@ async function localBrowserFallback(url: string, profile: AgentProfile, includeO
 export async function fillWithLocalAgent(url: string, profile: AgentProfile, document: { id: string; displayName: string }, includeOptional: boolean) {
   try {
     await extensionRequest('status', {}, 1500)
-    return await extensionRequest<AgentFillResult>('webAgentFill', { url, profile, document, includeOptional }, 45000)
-  } catch (error) {
-    if (error instanceof Error && error.message !== 'SnapFill Agent was not detected.') throw error
+  } catch {
     return localBrowserFallback(url, profile, includeOptional)
   }
+  return extensionRequest<AgentFillResult>('webAgentFill', { url, profile, document, includeOptional }, 45000)
 }

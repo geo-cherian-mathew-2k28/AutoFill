@@ -7,7 +7,8 @@ window.addEventListener('message', async (event) => {
   if (request?.channel !== REQUEST_CHANNEL || !['status', 'webAgentFill'].includes(request.type) || typeof request.requestId !== 'string') return
 
   try {
-    const response = await chrome.runtime.sendMessage({ type: request.type, ...request.payload })
+    if (!globalThis.chrome?.runtime?.sendMessage) throw new Error('SnapFill Agent is unavailable in this browser.')
+    const response = await globalThis.chrome.runtime.sendMessage({ type: request.type, ...request.payload })
     window.postMessage({ channel: RESPONSE_CHANNEL, requestId: request.requestId, ...response }, window.location.origin)
   } catch (error) {
     window.postMessage({ channel: RESPONSE_CHANNEL, requestId: request.requestId, ok: false, error: error instanceof Error ? error.message : 'The local agent is unavailable.' }, window.location.origin)
