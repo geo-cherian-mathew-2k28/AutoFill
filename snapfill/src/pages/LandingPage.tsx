@@ -1,4 +1,4 @@
-import { ArrowRight, FileCheck2, ShieldCheck, WifiOff, Zap } from 'lucide-react'
+import { ArrowRight, DatabaseZap, FileCheck2, ShieldCheck, Trash2, WifiOff, Zap } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 import { Button } from '@/components/ui/button'
@@ -7,6 +7,9 @@ import type { DocumentType } from '@/types/document'
 interface LandingPageProps {
   onScan: () => void
   onTryDemo: (type: Exclude<DocumentType, 'generic'>) => void
+  hasSavedData: boolean
+  onUseSavedData: () => void
+  onClearSavedData: () => void
 }
 
 const features = [
@@ -15,7 +18,7 @@ const features = [
   { icon: Zap, title: 'Instant form fill', detail: 'Review, then reuse' },
 ]
 
-export function LandingPage({ onScan, onTryDemo }: LandingPageProps) {
+export function LandingPage({ onScan, onTryDemo, hasSavedData, onUseSavedData, onClearSavedData }: LandingPageProps) {
   return (
     <div className="mx-auto max-w-6xl px-5 pb-20 pt-14 md:px-8 md:pt-24">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="mx-auto max-w-3xl text-center">
@@ -45,6 +48,7 @@ export function LandingPage({ onScan, onTryDemo }: LandingPageProps) {
           </button>
         ))}
       </div>
+      {hasSavedData && <div className="mx-auto mt-6 flex max-w-lg flex-wrap items-center justify-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-3"><DatabaseZap size={17} className="text-emerald-600" /><Button size="sm" variant="success" onClick={onUseSavedData}>Use saved details</Button><Button size="sm" variant="ghost" onClick={onClearSavedData}><Trash2 size={15} /> Clear saved data</Button></div>}
     </div>
   )
 }

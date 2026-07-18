@@ -1,8 +1,10 @@
 import { Camera, FileImage, LockKeyhole, Upload } from 'lucide-react'
+import { useEffect } from 'react'
 import { useDropzone } from 'react-dropzone'
 
 import { Button } from '@/components/ui/button'
 import type { DocumentType } from '@/types/document'
+import { warmOcr } from '@/utils/ocr'
 
 interface ScanPageProps {
   onFile: (file: File) => void
@@ -11,6 +13,7 @@ interface ScanPageProps {
 }
 
 export function ScanPage({ onFile, onDemo, onBack }: ScanPageProps) {
+  useEffect(() => { warmOcr() }, [])
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     accept: { 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'] },
     maxFiles: 1,

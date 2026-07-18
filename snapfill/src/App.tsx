@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Toaster, toast } from 'sonner'
 
 import { AppHeader } from '@/components/AppHeader'
 import { PrivacyBadge } from '@/components/PrivacyBadge'
-import { AutoFillPage } from '@/pages/AutoFillPage'
+import { AutoFillPage, type FormValues } from '@/pages/AutoFillPage'
 import { LandingPage } from '@/pages/LandingPage'
 import { ProcessingPage } from '@/pages/ProcessingPage'
 import { ResultsPage } from '@/pages/ResultsPage'
@@ -12,13 +12,22 @@ import { SuccessPage } from '@/pages/SuccessPage'
 import type { DocumentType, ExtractedDocument, ExtractedField } from '@/types/document'
 import { getDemoDocument } from '@/utils/demoData'
 import { recognizeDocument } from '@/utils/ocr'
+import { clearSavedDocument, loadSavedDocument, saveDocument } from '@/utils/profileStorage'
 
 type View = 'landing' | 'scan' | 'processing' | 'results' | 'autofill' | 'success'
 
 function App() {
   const [view, setView] = useState<View>('landing')
   const [progress, setProgress] = useState(0)
-  const [document, setDocument] = useState<ExtractedDocument>(() => getDemoDocument('aadhaar'))
+  const [document, setDocument] = useState<ExtractedDocument>(() => loadSavedDocument() ?? getDemoDocument('aadhaar'))
+  const [hasSavedData, setHasSavedData] = useState(() => loadSavedDocument() !== null)
+
+  useEffect(() => {
+    if (document.source === 'upload') {
+      saveDocument(document)
+      setHasSavedData(true)
+    }
+  }, [document])
 
   function startDemo(type: Exclude<DocumentType, 'generic'>) {
     setDocument(getDemoDocument(type))
@@ -44,6 +53,29 @@ function App() {
 
   function updateFields(fields: ExtractedField[]) {
     setDocument((current) => ({ ...current, fields }))
+  }
+
+  function finishForm(values: FormValues) {
+    const fields = document.fields.map((field) => ({ ...field, value: values[field.key as keyof FormValues] ?? field.value }))
+    const updated = { ...document, fields }
+    setDocument(updated)
+    saveDocument(updated)
+    setHasSavedData(true)
+    setView('success')
+  }
+
+  function useSavedData() {
+    const saved = loadSavedDocument()
+    if (saved) {
+      setDocument(saved)
+      setView('autofill')
+    }
+  }
+
+  function clearLocalData() {
+    clearSavedDocument()
+    setHasSavedData(false)
+    toast.success('Saved details cleared from this device')
   }
 
   function downloadJson() {
@@ -75,11 +107,11 @@ function App() {
     <div className="min-h-screen bg-white">
       <AppHeader onHome={onHome} onScan={onScan} />
       <main>
-        {view === 'landing' && <LandingPage onScan={onScan} onTryDemo={startDemo} />}
+        {view === 'landing' && <LandingPage onScan={onScan} onTryDemo={startDemo} hasSavedData={hasSavedData} onUseSavedData={useSavedData} onClearSavedData={clearLocalData} />}
         {view === 'scan' && <ScanPage onFile={handleFile} onDemo={startDemo} onBack={onHome} />}
         {view === 'processing' && <ProcessingPage progress={progress} />}
         {view === 'results' && <ResultsPage document={document} onChange={updateFields} onContinue={() => setView('autofill')} onBack={onScan} />}
-        {view === 'autofill' && <AutoFillPage document={document} onComplete={() => setView('success')} onBack={() => setView('results')} />}
+        {view === 'autofill' && <AutoFillPage document={document} onComplete={finishForm} onBack={() => setView('results')} />}
         {view === 'success' && <SuccessPage document={document} onDownload={downloadJson} onCopy={copyDetails} onStartAgain={onHome} />}
       </main>
       <PrivacyBadge />
