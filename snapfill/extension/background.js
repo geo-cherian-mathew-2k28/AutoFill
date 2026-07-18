@@ -1,6 +1,21 @@
 import { createVault, getVault, lockVault, saveCredential, saveDocument, saveProfile, summary, unlockVault, vaultExists } from './vault.js'
 
-function fillActiveForm(profile, credential) {
+function formDescriptors() {
+  return [...document.querySelectorAll('input, textarea, select')].map((control, index) => {
+    const label = control.labels ? [...control.labels].map((item) => item.textContent).join(' ') : ''
+    return {
+      index,
+      label,
+      name: control.name,
+      id: control.id,
+      type: control.type,
+      autocomplete: control.getAttribute('autocomplete'),
+      placeholder: control.getAttribute('placeholder'),
+    }
+  })
+}
+
+function fillActiveForm(profile, credential, aiMappings = {}) {
   const normalized = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
   const nameParts = String(profile.fullName ?? '').trim().split(/\s+/)
   const aliases = {
@@ -33,10 +48,10 @@ function fillActiveForm(profile, credential) {
     return true
   }
 
-  controls.forEach((control) => {
+  controls.forEach((control, index) => {
     const label = control.labels ? [...control.labels].map((item) => item.textContent).join(' ') : ''
     const identity = normalized([control.name, control.id, control.getAttribute('autocomplete'), control.getAttribute('aria-label'), control.getAttribute('placeholder'), label].join(' '))
-    const key = Object.entries(aliases).find(([, names]) => names.some((name) => identity.includes(name)))?.[0] ?? (identity === 'name' ? 'fullName' : undefined)
+    const key = aiMappings[index] ?? Object.entries(aliases).find(([, names]) => names.some((name) => identity.includes(name)))?.[0] ?? (identity === 'name' ? 'fullName' : undefined)
     if (key && setValue(control, values[key])) filled += 1
   })
   return { filled, total: controls.length, hostname: location.hostname }
@@ -48,13 +63,32 @@ async function activeTab() {
   return tab
 }
 
+async function aiMappingsFor(tabId, profile) {
+  const [description] = await chrome.scripting.executeScript({ target: { tabId }, func: formDescriptors })
+  const fields = description.result ?? []
+  if (!fields.length) return {}
+  const response = await fetch('http://127.0.0.1:5174/api/resolve-form', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fields,
+      availableKeys: [...Object.keys(profile), 'firstName', 'lastName', 'username', 'password'],
+    }),
+  })
+  if (!response.ok) throw new Error('AI field resolver was unavailable.')
+  const body = await response.json()
+  return Object.fromEntries((body.mappings ?? []).map((mapping) => [mapping.fieldIndex, mapping.profileKey]))
+}
+
 async function fillTab(tabId) {
   const vault = getVault()
   const tab = await chrome.tabs.get(tabId)
   const hostname = tab.url ? new URL(tab.url).hostname : ''
   const credential = vault.credentials.find((item) => item.hostname === hostname)
-  const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: fillActiveForm, args: [vault.profile, credential] })
-  return result.result
+  let aiMappings = {}
+  try { aiMappings = await aiMappingsFor(tabId, vault.profile) } catch { /* Heuristic matching remains available when AI is not configured. */ }
+  const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: fillActiveForm, args: [vault.profile, credential, aiMappings] })
+  return { ...result.result, aiMappings: Object.keys(aiMappings).length }
 }
 
 async function waitForLoad(tabId) {

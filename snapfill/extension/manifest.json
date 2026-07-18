@@ -5,6 +5,7 @@
   "description": "A local encrypted vault and user-triggered form autofill agent.",
   "minimum_chrome_version": "120",
   "permissions": ["activeTab", "scripting", "storage", "tabs"],
+  "host_permissions": ["http://127.0.0.1:5174/*"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "background": {
     "service_worker": "background.js",
